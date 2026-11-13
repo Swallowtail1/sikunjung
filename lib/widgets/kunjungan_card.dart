@@ -4,12 +4,14 @@ import '../models/kunjungan.dart';
 class KunjunganCard extends StatelessWidget {
   final Kunjungan kunjungan;
   final VoidCallback onTap;
+  final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   const KunjunganCard({
     super.key,
     required this.kunjungan,
     required this.onTap,
+    required this.onEdit,
     required this.onDelete,
   });
 
@@ -62,9 +64,18 @@ class KunjunganCard extends StatelessWidget {
                   ],
                 ),
               ),
-              IconButton(
-                icon: const Icon(Icons.delete_outline, color: Colors.red),
-                onPressed: onDelete,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.edit, color: Colors.blue),
+                    onPressed: onEdit,
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    onPressed: onDelete,
+                  ),
+                ],
               ),
             ],
           ),

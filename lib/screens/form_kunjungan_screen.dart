@@ -5,7 +5,10 @@ import '../database/database_helper.dart';
 import '../services/location_service.dart';
 
 class FormKunjunganScreen extends StatefulWidget {
-  const FormKunjunganScreen({super.key});
+  final Kunjungan? kunjungan; // Jika null = Tambah Baru, Jika terisi = Update Data
+
+  // Tambahkan opsional parameter kunjungan
+  const FormKunjunganScreen({super.key, this.kunjungan});
 
   @override
   State<FormKunjunganScreen> createState() => _FormKunjunganScreenState();
@@ -25,52 +28,53 @@ class _FormKunjunganScreenState extends State<FormKunjunganScreen> {
   bool _isLoadingLocation = false;
   bool _isSaving = false;
 
-  // Fungsi yang dipicu oleh tombol "Ambil Lokasi"[cite: 1]
+  bool get _isEditMode => widget.kunjungan != null; // Cek apakah sedang mode edit
+
+  @override
+  void initState() {
+    super.initState();
+    // Jika dalam mode Edit, isikan form dengan data pelanggan lama
+    if (_isEditMode) {
+      _namaController.text = widget.kunjungan!.namaPelanggan;
+      _alamatController.text = widget.kunjungan!.alamat;
+      _noHpController.text = widget.kunjungan!.noHp;
+      _catatanController.text = widget.kunjungan!.catatan;
+      _latitude = widget.kunjungan!.latitude;
+      _longitude = widget.kunjungan!.longitude;
+    }
+  }
+
   Future<void> _ambilLokasiTerkini() async {
     setState(() => _isLoadingLocation = true);
-
     try {
       final position = await _locationService.getCurrentLocation();
       setState(() {
         _latitude = position.latitude;
         _longitude = position.longitude;
       });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Lokasi berhasil didapatkan!')),
-        );
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Lokasi berhasil didapatkan!')));
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
-        );
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: Colors.red));
     } finally {
       setState(() => _isLoadingLocation = false);
     }
   }
 
-  // Fungsi untuk menyimpan data ke SQLite[cite: 1]
   Future<void> _simpanData() async {
-    // Validasi input form[cite: 1]
     if (!_formKey.currentState!.validate()) return;
 
-    // Validasi tambahan memastikan lokasi sudah diambil
     if (_latitude == null || _longitude == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Harap ambil lokasi GPS terlebih dahulu!'), backgroundColor: Colors.orange),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Harap ambil lokasi GPS terlebih dahulu!'), backgroundColor: Colors.orange));
       return;
     }
 
     setState(() => _isSaving = true);
 
-    // Ambil tanggal hari ini[cite: 1]
+    // Gunakan tanggal saat ini ketika disave
     final tanggalSekarang = DateFormat('dd MMM yyyy, HH:mm').format(DateTime.now());
 
-    final kunjunganBaru = Kunjungan(
+    final kunjunganData = Kunjungan(
+      id: _isEditMode ? widget.kunjungan!.id : null, // Penting! Bawa ID lama jika mode edit
       namaPelanggan: _namaController.text.trim(),
       alamat: _alamatController.text.trim(),
       noHp: _noHpController.text.trim(),
@@ -81,19 +85,20 @@ class _FormKunjunganScreenState extends State<FormKunjunganScreen> {
     );
 
     try {
-      await DatabaseHelper.instance.insertKunjungan(kunjunganBaru);
+      if (_isEditMode) {
+        await DatabaseHelper.instance.updateKunjungan(kunjunganData); // Eksekusi operasi UPDATE (J.612000.003.01)
+      } else {
+        await DatabaseHelper.instance.insertKunjungan(kunjunganData); // Eksekusi operasi INSERT[cite: 1]
+      }
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Data kunjungan berhasil disimpan')),
+          SnackBar(content: Text(_isEditMode ? 'Data kunjungan berhasil diperbarui' : 'Data kunjungan berhasil disimpan')),
         );
-        Navigator.pop(context); // Kembali ke halaman sebelumnya (Daftar Kunjungan)
+        Navigator.pop(context);
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Gagal menyimpan data'), backgroundColor: Colors.red),
-        );
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gagal menyimpan data'), backgroundColor: Colors.red));
     } finally {
       setState(() => _isSaving = false);
     }
@@ -103,7 +108,8 @@ class _FormKunjunganScreenState extends State<FormKunjunganScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Tambah Kunjungan'),
+        // Ubah judul AppBar dinamis
+        title: Text(_isEditMode ? 'Edit Kunjungan' : 'Tambah Kunjungan'),
         backgroundColor: Theme.of(context).colorScheme.primaryContainer,
       ),
       body: SingleChildScrollView(
@@ -119,7 +125,6 @@ class _FormKunjunganScreenState extends State<FormKunjunganScreen> {
                 validator: (value) => value == null || value.isEmpty ? 'Nama tidak boleh kosong' : null,
               ),
               const SizedBox(height: 16),
-
               TextFormField(
                 controller: _alamatController,
                 decoration: const InputDecoration(labelText: 'Alamat', border: OutlineInputBorder()),
@@ -127,32 +132,18 @@ class _FormKunjunganScreenState extends State<FormKunjunganScreen> {
                 validator: (value) => value == null || value.isEmpty ? 'Alamat tidak boleh kosong' : null,
               ),
               const SizedBox(height: 16),
-
               TextFormField(
                 controller: _noHpController,
-                decoration: const InputDecoration(
-                    labelText: 'No. HP',
-                    border: OutlineInputBorder(),
-                    hintText: 'Contoh: 081234567890'
-                ),
+                decoration: const InputDecoration(labelText: 'No. HP', border: OutlineInputBorder(), hintText: 'Contoh: 081234567890'),
                 keyboardType: TextInputType.phone,
                 validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'No. HP tidak boleh kosong';
-                  }
-                  // Validasi hanya angka menggunakan Regular Expression (Regex)
-                  if (!RegExp(r'^[0-9]+$').hasMatch(value)) {
-                    return 'No. HP hanya boleh berisi angka';
-                  }
-                  // Validasi panjang minimal[cite: 1]
-                  if (value.length < 10) {
-                    return 'No. HP minimal 10 digit';
-                  }
+                  if (value == null || value.isEmpty) return 'No. HP tidak boleh kosong';
+                  if (!RegExp(r'^[0-9]+$').hasMatch(value)) return 'No. HP hanya boleh berisi angka';
+                  if (value.length < 10) return 'No. HP minimal 10 digit';
                   return null;
                 },
               ),
               const SizedBox(height: 16),
-
               TextFormField(
                 controller: _catatanController,
                 decoration: const InputDecoration(labelText: 'Catatan (Opsional)', border: OutlineInputBorder()),
@@ -160,7 +151,6 @@ class _FormKunjunganScreenState extends State<FormKunjunganScreen> {
               ),
               const SizedBox(height: 24),
 
-              // Bagian Pengambilan Lokasi GPS[cite: 1]
               Card(
                 elevation: 0,
                 color: Theme.of(context).colorScheme.surfaceVariant,
@@ -177,7 +167,7 @@ class _FormKunjunganScreenState extends State<FormKunjunganScreen> {
                             icon: _isLoadingLocation
                                 ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
                                 : const Icon(Icons.location_on),
-                            label: const Text('Ambil Lokasi'),
+                            label: Text(_latitude == null ? 'Ambil Lokasi' : 'Perbarui Lokasi'),
                           ),
                         ],
                       ),
@@ -198,7 +188,6 @@ class _FormKunjunganScreenState extends State<FormKunjunganScreen> {
               ),
               const SizedBox(height: 32),
 
-              // Tombol Simpan
               ElevatedButton(
                 onPressed: _isSaving ? null : _simpanData,
                 style: ElevatedButton.styleFrom(
@@ -208,7 +197,7 @@ class _FormKunjunganScreenState extends State<FormKunjunganScreen> {
                 ),
                 child: _isSaving
                     ? const CircularProgressIndicator(color: Colors.white)
-                    : const Text('SIMPAN KUNJUNGAN', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    : Text(_isEditMode ? 'SIMPAN PERUBAHAN' : 'SIMPAN KUNJUNGAN', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               ),
             ],
           ),

@@ -179,6 +179,12 @@ class _DaftarKunjunganScreenState extends State<DaftarKunjunganScreen> {
                       onTap: () {
                         Navigator.push(context, MaterialPageRoute(builder: (_) => DetailKunjunganScreen(kunjungan: item)));
                       },
+                      onEdit: () {
+                        Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => FormKunjunganScreen(kunjungan: item))
+                        ).then((_) => _loadData()); // Refresh halaman setelah edit
+                      },
                       onDelete: () => _konfirmasiHapus(item),
                     );
                   },
@@ -194,6 +200,12 @@ class _DaftarKunjunganScreenState extends State<DaftarKunjunganScreen> {
                         kunjungan: item,
                         onTap: () {
                           Navigator.push(context, MaterialPageRoute(builder: (_) => DetailKunjunganScreen(kunjungan: item)));
+                        },
+                        onEdit: () {
+                          Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => FormKunjunganScreen(kunjungan: item))
+                          ).then((_) => _loadData()); // Refresh halaman setelah edit
                         },
                         onDelete: () => _konfirmasiHapus(item),
                       ),
