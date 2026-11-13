@@ -8,6 +8,8 @@ import 'daftar_kunjungan_screen.dart';
 import 'peta_kunjungan_screen.dart';
 import 'sensor_network_screen.dart';
 import 'info_perangkat_screen.dart';
+import '../widgets/offline_banner.dart';
+import '../widgets/menu_card.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -81,18 +83,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
       body: Column(
         children: [
-          // Banner Peringatan Offline (J.612000.025.01)
-          if (_isOffline)
-            Container(
-              width: double.infinity,
-              color: Colors.redAccent,
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: const Text(
-                'Anda sedang Offline. Beberapa fitur (Peta) mungkin tidak tersedia.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-              ),
-            ),
+          // Banner Peringatan Offline
+          OfflineBanner(isOffline: _isOffline),
 
           Expanded(
             child: RefreshIndicator(
@@ -141,36 +133,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     crossAxisSpacing: 16,
                     mainAxisSpacing: 16,
                     children: [
-                      _buildMenuCard(
-                        context,
+                      MenuCard(
                         icon: Icons.list_alt,
                         title: 'Daftar\nKunjungan',
                         onTap: () {
                           Navigator.push(
                             context,
                             MaterialPageRoute(builder: (context) => const DaftarKunjunganScreen()),
-                          ).then((_) => _loadDataDashboard()); // Refresh total saat kembali
+                          ).then((_) => _loadDataDashboard());
                         },
                       ),
-                      _buildMenuCard(
-                        context,
+                      MenuCard(
                         icon: Icons.map,
                         title: 'Peta\nLokasi',
                         onTap: () {
                           Navigator.push(context, MaterialPageRoute(builder: (context) => const PetaKunjunganScreen()));
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sedang memuat Halaman Peta...')));
                         },
                       ),
-                      _buildMenuCard(
-                        context,
+                      MenuCard(
                         icon: Icons.sensors,
                         title: 'Sensor &\nJaringan',
                         onTap: () {
                           Navigator.push(context, MaterialPageRoute(builder: (context) => const SensorNetworkScreen()));
                         },
                       ),
-                      _buildMenuCard(
-                        context,
+                      MenuCard(
                         icon: Icons.phone_android,
                         title: 'Info\nPerangkat',
                         onTap: () {
@@ -184,30 +171,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  // Reusable Widget untuk Menu Card
-  Widget _buildMenuCard(BuildContext context, {required IconData icon, required String title, required VoidCallback onTap}) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Card(
-        elevation: 2,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 48, color: Theme.of(context).colorScheme.primary),
-            const SizedBox(height: 12),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ],
-        ),
       ),
     );
   }
