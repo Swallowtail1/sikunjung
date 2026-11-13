@@ -11,7 +11,7 @@ class DatabaseHelper {
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDB('sikunjung.db'); // Nama file database
+    _database = await _initDB('sikunjung.db');
     return _database!;
   }
 
@@ -27,7 +27,7 @@ class DatabaseHelper {
   }
 
   Future _createDB(Database db, int version) async {
-    // Membuat tabel users[cite: 1]
+    // Membuat tabel users
     await db.execute('''
       CREATE TABLE users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -36,7 +36,7 @@ class DatabaseHelper {
       )
     ''');
 
-    // Membuat tabel kunjungan[cite: 1]
+    // Membuat tabel kunjungan
     await db.execute('''
       CREATE TABLE kunjungan (
         id INTEGER PRIMARY KEY AUTOINCREMENT,

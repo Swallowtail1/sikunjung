@@ -1,10 +1,14 @@
+
 import 'dart:async';
 import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:sensors_plus/sensors_plus.dart';
+
 import '../widgets/kunjungan_card.dart';
 import '../models/kunjungan.dart';
 import '../database/database_helper.dart';
+
 import 'form_kunjungan_screen.dart';
 import 'detail_kunjungan_screen.dart';
 
@@ -12,69 +16,220 @@ class DaftarKunjunganScreen extends StatefulWidget {
   const DaftarKunjunganScreen({super.key});
 
   @override
-  State<DaftarKunjunganScreen> createState() => _DaftarKunjunganScreenState();
+  State<DaftarKunjunganScreen> createState() =>
+      _DaftarKunjunganScreenState();
 }
 
-class _DaftarKunjunganScreenState extends State<DaftarKunjunganScreen> {
+class _DaftarKunjunganScreenState
+    extends State<DaftarKunjunganScreen> {
+
+  // DATA
   List<Kunjungan> _semuaKunjungan = [];
   List<Kunjungan> _kunjunganTampil = [];
+
   String _searchQuery = '';
 
-  StreamSubscription<AccelerometerEvent>? _accelerometerSubscription;
+  StreamSubscription<AccelerometerEvent>?
+  _accelerometerSubscription;
+
   DateTime _lastShakeTime = DateTime.now();
 
+  static const Color primaryBlue = Color(0xFF2563EB);
+  static const Color backgroundColor = Color(0xFFF5F7FB);
+  static const Color darkText = Color(0xFF1E293B);
+  static const Color secondaryText = Color(0xFF64748B);
+
+  // INITIALIZATION
   @override
   void initState() {
     super.initState();
+
     _loadData();
     _initShakeToRefresh();
   }
 
-  // Mengambil data ASLI dari SQLite
+  // LOAD DATA FROM SQLITE
   Future<void> _loadData() async {
-    final data = await DatabaseHelper.instance.getAllKunjungan();
+    final data =
+    await DatabaseHelper.instance.getAllKunjungan();
+
+    if (!mounted) return;
+
+    final query = _searchQuery.toLowerCase();
+
+    final filteredData = query.isEmpty
+        ? data
+        : data.where((k) {
+      return k.namaPelanggan
+          .toLowerCase()
+          .contains(query) ||
+          k.alamat.toLowerCase().contains(query);
+    }).toList();
+
     setState(() {
       _semuaKunjungan = data;
-      _filterKunjungan(_searchQuery); // Terapkan filter pencarian jika ada
+      _kunjunganTampil = filteredData;
     });
   }
 
-  // Fitur Pencarian Data
+  // SEARCH FILTER
   void _filterKunjungan(String query) {
+    final normalizedQuery = query.toLowerCase();
+
     setState(() {
       _searchQuery = query;
-      if (query.isEmpty) {
-        _kunjunganTampil = _semuaKunjungan;
-      } else {
-        _kunjunganTampil = _semuaKunjungan
-            .where((k) => k.namaPelanggan.toLowerCase().contains(query.toLowerCase()) ||
-            k.alamat.toLowerCase().contains(query.toLowerCase()))
-            .toList();
-      }
+
+      _kunjunganTampil = _semuaKunjungan.where((k) {
+        return k.namaPelanggan
+            .toLowerCase()
+            .contains(normalizedQuery) ||
+            k.alamat
+                .toLowerCase()
+                .contains(normalizedQuery);
+      }).toList();
     });
   }
 
-  // Integrasi Sensor Accelerometer untuk fitur "Shake to Refresh" (J.612000.022.01)
+  // SHAKE TO REFRESH
   void _initShakeToRefresh() {
-    _accelerometerSubscription = accelerometerEventStream().listen((AccelerometerEvent event) {
-      double acceleration = sqrt(event.x * event.x + event.y * event.y + event.z * event.z);
-
-      // Ambang batas guncangan keras (> 15 m/s²)
-      if (acceleration > 15) {
-        final now = DateTime.now();
-        // Debounce 2 detik agar tidak me-refresh berkali-kali dalam 1 guncangan
-        if (now.difference(_lastShakeTime).inSeconds > 2) {
-          _lastShakeTime = now;
-          _loadData(); // Tarik ulang data dari database
-
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Daftar kunjungan diperbarui (Guncangan terdeteksi)')),
+    _accelerometerSubscription =
+        accelerometerEventStream().listen(
+              (AccelerometerEvent event) {
+            final acceleration = sqrt(
+              event.x * event.x +
+                  event.y * event.y +
+                  event.z * event.z,
             );
-          }
-        }
-      }
-    });
+
+            if (acceleration > 15) {
+              final now = DateTime.now();
+
+              if (now.difference(_lastShakeTime).inSeconds > 2) {
+                _lastShakeTime = now;
+
+                _loadData();
+
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Daftar kunjungan berhasil diperbarui.',
+                      ),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
+              }
+            }
+          },
+        );
+  }
+
+  // DELETE CONFIRMATION
+  void _konfirmasiHapus(Kunjungan kunjungan) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+
+        title: const Text(
+          'Hapus Kunjungan?',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: darkText,
+          ),
+        ),
+
+        content: Text(
+          'Apakah Anda yakin ingin menghapus data kunjungan '
+              'ke ${kunjungan.namaPelanggan}?',
+          style: const TextStyle(
+            color: secondaryText,
+            height: 1.5,
+          ),
+        ),
+
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text(
+              'Batal',
+              style: TextStyle(color: secondaryText),
+            ),
+          ),
+
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+
+              await DatabaseHelper.instance
+                  .deleteKunjungan(kunjungan.id!);
+
+              await _loadData();
+
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Data berhasil dihapus'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+            },
+
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+
+            child: const Text('Hapus'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ADD VISIT
+  void _tambahKunjungan() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const FormKunjunganScreen(),
+      ),
+    ).then((_) => _loadData());
+  }
+
+  // OPEN DETAIL
+  void _bukaDetail(Kunjungan item) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => DetailKunjunganScreen(
+          kunjungan: item,
+        ),
+      ),
+    );
+  }
+
+  // EDIT VISIT
+  void _editKunjungan(Kunjungan item) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => FormKunjunganScreen(
+          kunjungan: item,
+        ),
+      ),
+    ).then((_) => _loadData());
   }
 
   @override
@@ -83,132 +238,331 @@ class _DaftarKunjunganScreenState extends State<DaftarKunjunganScreen> {
     super.dispose();
   }
 
-  // Dialog konfirmasi hapus data
-  void _konfirmasiHapus(Kunjungan kunjungan) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Hapus Data'),
-        content: Text('Apakah Anda yakin ingin menghapus kunjungan ke ${kunjungan.namaPelanggan}?'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Batal')
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await DatabaseHelper.instance.deleteKunjungan(kunjungan.id!); // Hapus dari SQLite
-              _loadData(); // Refresh UI
+  // EMPTY STATE
+  Widget _buildEmptyState({
+    required IconData icon,
+    required String title,
+    required String description,
+  }) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
 
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Data berhasil dihapus')),
-                );
-              }
-            },
-            child: const Text('Hapus', style: TextStyle(color: Colors.red)),
-          ),
-        ],
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 85,
+              height: 85,
+              decoration: BoxDecoration(
+                color: const Color(0xFFDBEAFE),
+                borderRadius: BorderRadius.circular(25),
+              ),
+
+              child: Icon(
+                icon,
+                color: primaryBlue,
+                size: 40,
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.bold,
+                color: darkText,
+              ),
+            ),
+
+            const SizedBox(height: 8),
+
+            Text(
+              description,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 13,
+                height: 1.5,
+                color: secondaryText,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
+  // BUILD CARD
+  Widget _buildKunjunganCard(Kunjungan item) {
+    return KunjunganCard(
+      kunjungan: item,
+      onTap: () => _bukaDetail(item),
+      onEdit: () => _editKunjungan(item),
+      onDelete: () => _konfirmasiHapus(item),
+    );
+  }
+
+  // BUILD UI
   @override
   Widget build(BuildContext context) {
+    final isLandscape =
+        MediaQuery.of(context).orientation ==
+            Orientation.landscape;
+
     return Scaffold(
+      backgroundColor: backgroundColor,
+
+      // APP BAR
       appBar: AppBar(
-        title: const Text('Daftar Kunjungan'),
-        backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+        backgroundColor: backgroundColor,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+
+        toolbarHeight: 75,
+
+        title: const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Daftar Kunjungan',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: darkText,
+              ),
+            ),
+
+            SizedBox(height: 4),
+
+            Text(
+              'Kelola data kunjungan lapangan',
+              style: TextStyle(
+                fontSize: 11,
+                color: secondaryText,
+                fontWeight: FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          // Navigasi ke Form Tambah dan refresh list saat kembali[cite: 1]
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const FormKunjunganScreen()),
-          ).then((_) => _loadData());
-        },
-        child: const Icon(Icons.add),
+
+      // ADD BUTTON
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _tambahKunjungan,
+        backgroundColor: primaryBlue,
+        foregroundColor: Colors.white,
+        elevation: 4,
+
+        icon: const Icon(Icons.add_rounded),
+
+        label: const Text(
+          'Tambah Kunjungan',
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
       ),
+
+      // BODY
       body: Column(
         children: [
-          // Kolom Pencarian
+
+          // SEARCH BAR
           Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: const EdgeInsets.fromLTRB(
+              20, 12, 20, 20,
+            ),
+
             child: TextField(
               onChanged: _filterKunjungan,
+
               decoration: InputDecoration(
                 hintText: 'Cari nama pelanggan atau alamat...',
-                prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                hintStyle: const TextStyle(
+                  color: Color(0xFF94A3B8),
+                  fontSize: 12,
+                ),
+
+                prefixIcon: const Icon(
+                  Icons.search_rounded,
+                  color: secondaryText,
+                ),
+
                 filled: true,
-                fillColor: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3),
+                fillColor: Colors.white,
+
+                contentPadding: const EdgeInsets.symmetric(
+                  vertical: 17,
+                  horizontal: 16,
+                ),
+
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(15),
+                  borderSide: BorderSide.none,
+                ),
+
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(15),
+                  borderSide: const BorderSide(
+                    color: Color(0xFFEAEFF5),
+                  ),
+                ),
+
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(15),
+                  borderSide: const BorderSide(
+                    color: primaryBlue,
+                    width: 1.3,
+                  ),
+                ),
               ),
             ),
           ),
 
+          // SECTION HEADER
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 20,
+            ),
+
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Data Kunjungan',
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                    color: darkText,
+                  ),
+                ),
+
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFDBEAFE),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+
+                  child: Text(
+                    '${_kunjunganTampil.length} Data',
+
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: primaryBlue,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 8),
+
+          // SHAKE REFRESH INFORMATION
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 20,
+            ),
+
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.vibration_rounded,
+                  size: 14,
+                  color: Color(0xFF94A3B8),
+                ),
+
+                const SizedBox(width: 6),
+
+                Text(
+                  'Goyangkan perangkat untuk memperbarui data',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: Colors.grey.shade500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 14),
+
+          // DATA LIST
           Expanded(
             child: Builder(
               builder: (context) {
+
                 if (_semuaKunjungan.isEmpty) {
-                  return const Center(child: Text('Belum ada data kunjungan. Silakan tambah data.'));
+                  return _buildEmptyState(
+                    icon: Icons.folder_open_rounded,
+                    title: 'Belum Ada Kunjungan',
+                    description:
+                    'Data kunjungan belum tersedia. '
+                        'Tambahkan kunjungan baru untuk mulai mengisi daftar.',
+                  );
                 }
 
                 if (_kunjunganTampil.isEmpty) {
-                  return const Center(child: Text('Data tidak ditemukan.'));
+                  return _buildEmptyState(
+                    icon: Icons.search_off_rounded,
+                    title: 'Data Tidak Ditemukan',
+                    description:
+                    'Coba gunakan kata kunci lain untuk '
+                        'menemukan data kunjungan.',
+                  );
                 }
 
-                // Mendeteksi orientasi layar dengan MediaQuery (Lebih akurat daripada LayoutBuilder)[cite: 1]
-                bool isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
+                // LANDSCAPE GRID
+                if (isLandscape) {
+                  return GridView.builder(
+                    padding: const EdgeInsets.fromLTRB(
+                      20, 4, 20, 100,
+                    ),
 
-                return isLandscape
-                    ? GridView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    childAspectRatio: 2.5,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
+                    gridDelegate:
+                    const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      childAspectRatio: 2.5,
+                      crossAxisSpacing: 14,
+                      mainAxisSpacing: 14,
+                    ),
+
+                    itemCount: _kunjunganTampil.length,
+
+                    itemBuilder: (context, index) {
+                      final item = _kunjunganTampil[index];
+                      return _buildKunjunganCard(item);
+                    },
+                  );
+                }
+
+                // PORTRAIT LIST
+                return ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(
+                    20, 4, 20, 100,
                   ),
+
                   itemCount: _kunjunganTampil.length,
+
                   itemBuilder: (context, index) {
                     final item = _kunjunganTampil[index];
-                    return KunjunganCard(
-                      kunjungan: item,
-                      onTap: () {
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => DetailKunjunganScreen(kunjungan: item)));
-                      },
-                      onEdit: () {
-                        Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => FormKunjunganScreen(kunjungan: item))
-                        ).then((_) => _loadData()); // Refresh halaman setelah edit
-                      },
-                      onDelete: () => _konfirmasiHapus(item),
-                    );
-                  },
-                )
-                    : ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  itemCount: _kunjunganTampil.length,
-                  itemBuilder: (context, index) {
-                    final item = _kunjunganTampil[index];
+
                     return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: KunjunganCard(
-                        kunjungan: item,
-                        onTap: () {
-                          Navigator.push(context, MaterialPageRoute(builder: (_) => DetailKunjunganScreen(kunjungan: item)));
-                        },
-                        onEdit: () {
-                          Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (_) => FormKunjunganScreen(kunjungan: item))
-                          ).then((_) => _loadData()); // Refresh halaman setelah edit
-                        },
-                        onDelete: () => _konfirmasiHapus(item),
+                      padding: const EdgeInsets.only(
+                        bottom: 14,
                       ),
+
+                      child: _buildKunjunganCard(item),
                     );
                   },
                 );
